@@ -167,12 +167,13 @@ if uploaded_file is not None:
 
     default_usecols = []
     default_names = []
-    if len(df_tmp.columns) == 7:
+    if len(df_tmp.columns) <= 8:
         default_usecols = [0, 3, 4, 5, 6]
         default_names = ['Remote Host', 'Time', 'Request', 'Status', 'Size']
-    elif len(df_tmp.columns) > 7:
+    elif len(df_tmp.columns) > 8:
         default_usecols = [0, 3, 4, 5, 6, 8]
         default_names = ['Remote Host', 'Time', 'Request', 'Status', 'Size', 'User Agent']
+
     usecols = st.multiselect(
         '何番目の列を解析の対象にしますか？',
         [i for i in range(0,len(df_tmp.columns))],
@@ -414,6 +415,22 @@ if uploaded_file is not None:
             error_access.plot()
             plt.title('Total Error Access')
             plt.ylabel('Error Access')
+            ax = plt.gca()
+            ax.yaxis.set_major_locator(MultipleLocator(1))
+            fig
+ 
+        if 'Request' in df.columns and 'Time' in df.columns and 'Status' in df.columns:
+            st.markdown('### システムエラー（HTTP 5xx）の発生状況')
+            fig = plt.figure(figsize = (15, 5))
+            error_access = df[['Request', 'Status']]
+            error_access.index = df['Time']
+            error_access = error_access.resample('S')['Status'].apply(lambda x: (x >= 500).sum())
+            error_access.index.name = 'Time'
+            error_access.plot()
+            plt.title('Total Error Access')
+            plt.ylabel('Error Access')
+            ax = plt.gca()
+            ax.yaxis.set_major_locator(MultipleLocator(1))
             fig
  
         if 'Request' in df.columns and 'Time' in df.columns and 'Response Time' in df.columns:
