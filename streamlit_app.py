@@ -235,10 +235,10 @@ if uploaded_file is not None:
         converters = {}
         for name in names:
             if name == 'Response Time (ms)':
-                converters['Response Time'] = deafult_converters['Response Time']
+                converters['Response Time'] = int
                 is_RT_sec = False
             elif name == 'Response Time (s)':
-                converters['Response Time'] = deafult_converters['Response Time']
+                converters['Response Time'] = float
                 is_RT_sec = True
             elif name in deafult_converters.keys():
                 converters[name] = deafult_converters[name]
@@ -279,13 +279,17 @@ if uploaded_file is not None:
         my_bar.progress(30)
 
         if 'Response Time' in df.columns:
-            min_rt = str(int(df['Response Time'].min())).rjust(10)
-            mean_rt = str(int(df['Response Time'].mean())).rjust(10)
-            median_rt = str(int(df['Response Time'].median())).rjust(10)
-            max_rt = str(int(df['Response Time'].max())).rjust(10)
             if is_RT_sec:
+                min_rt = str(round(df['Response Time'].min(), 3)).rjust(10)
+                mean_rt = str(round(df['Response Time'].mean(), 3)).rjust(10)
+                median_rt = str(round(df['Response Time'].median(), 3)).rjust(10)
+                max_rt = str(round(df['Response Time'].max(), 3)).rjust(10)
                 unit_rs = '秒'
             else:
+                min_rt = str(int(df['Response Time'].min())).rjust(10)
+                mean_rt = str(int(df['Response Time'].mean())).rjust(10)
+                median_rt = str(int(df['Response Time'].median())).rjust(10)
+                max_rt = str(int(df['Response Time'].max())).rjust(10)
                 unit_rs = 'ミリ秒'
             st.markdown(f'''
             ### 応答時間の集計結果
