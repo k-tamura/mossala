@@ -78,9 +78,11 @@ def parse_str(x):
         return x
 
 def parse_datetime(x):
-    dt = datetime.strptime(x[1:-7], '%d/%b/%Y:%H:%M:%S')
-    dt_tz = int(x[-6:-3])*60+int(x[-3:-1])
-    return dt.replace(tzinfo=pytz.FixedOffset(dt_tz))
+    if x.startswith("["):
+        dt = datetime.strptime(x[1:21], '%d/%b/%Y:%H:%M:%S')
+    else:
+        dt = datetime.strptime(x[0:20], '%d/%b/%Y:%H:%M:%S')
+    return dt
 
 def drow_pie_and_table(df, col_name, title):
     st.markdown('### ' + title)
@@ -197,9 +199,7 @@ if uploaded_file is not None:
 
         if 'Time' in names \
             and (not first_row_of_time \
-            or type(first_row_of_time) != str \
-            or not first_row_of_time.startswith('[') \
-            or not first_row_of_time.endswith(']')):
+            or type(first_row_of_time) != str):
             st.error('Time列の値が時刻形式ではありません。')
         elif 'Status' in names \
             and (all_row_of_status.dtypes != 'int64'
