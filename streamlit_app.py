@@ -137,6 +137,8 @@ st.image('logo.png')
 * WildFly
 '''
 
+ALL_METHODS = ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'CONNECT', 'OPTIONS', 'TRACE', 'LINK', 'UNLINK']
+
 uploaded_file = st.file_uploader("アクセスログをアップロードしてください。")
 if uploaded_file is not None:
 
@@ -146,6 +148,13 @@ if uploaded_file is not None:
         engine='python',
         na_values='-',
         header=None)
+
+    # Consideration when request column is not enclosed by commas, like "GET / HTTP/1.0"
+    for i in range(len(df_tmp.columns) - 2):
+        if df_tmp[i].isin(ALL_METHODS).all():
+            df_tmp[i] = df_tmp[i].astype(str).str.cat([df_tmp[i + 1].astype(str), df_tmp[i + 2].astype(str)], sep=' ')
+            df_tmp.drop(columns=[i+1, i+2], inplace=True)
+            break
 
     st.markdown('### アクセスログ（先頭5件）')
     st.write(df_tmp.head(5))
