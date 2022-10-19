@@ -133,6 +133,7 @@ def drow_delayed_access(df, is_RT_sec, sec):
             break
 
 def define_usecols(df_tmp, default_usecols, default_names):
+
     for i in range(df_tmp.shape[1]):
         colNumeric = pd.to_numeric(df_tmp[i], errors="coerce")
         isNumeric = pd.to_numeric(df_tmp[i], errors="coerce").notna().all()
@@ -144,7 +145,19 @@ def define_usecols(df_tmp, default_usecols, default_names):
             default_usecols.append(i)
             default_names.append('Time')
             continue
-        if not 'Request' in default_names and type(df_tmp.iloc[0, i]) == str and 'HTTP/' in df_tmp.iloc[0, i]:
+        if not 'Method' in default_names and df_tmp[i].isin(ALL_METHODS).all():
+            default_usecols.append(i)
+            default_names.append('Method')
+            continue
+        if not 'URL' in default_names and type(df_tmp.iloc[0, i]) == str and df_tmp.iloc[0, i].startswith('/'):
+            default_usecols.append(i)
+            default_names.append('URL')
+            continue
+        if not 'Version' in default_names and type(df_tmp.iloc[0, i]) == str and df_tmp.iloc[0, i].startswith('HTTP/'):
+            default_usecols.append(i)
+            default_names.append('Version')
+            continue
+        if not 'Version' in default_names and not 'Request' in default_names and type(df_tmp.iloc[0, i]) == str and 'HTTP/' in df_tmp.iloc[0, i]:
             default_usecols.append(i)
             default_names.append('Request')
             continue
@@ -194,14 +207,6 @@ if uploaded_file is not None:
         na_values='-',
         header=None)
 
-    # Consideration when request column is not enclosed by commas, like "GET / HTTP/1.0"
-    for i in range(len(df_tmp.columns) - 2):
-        if df_tmp[i].isin(ALL_METHODS).all():
-            df_tmp[i] = df_tmp[i].astype(str).str.cat([df_tmp[i + 1].astype(str), df_tmp[i + 2].astype(str)], sep=' ')
-            df_tmp.drop([i+1, i+2], axis=1, inplace=True)
-            df_tmp.columns = range(df_tmp.shape[1])
-            break
-    
     default_usecols = []
     default_names = []
 
@@ -223,6 +228,9 @@ if uploaded_file is not None:
         | User Agent | `\"%{User-agent}i\"` | リクエストのUser-agentヘッダの内容 | 
         | Response Time (ms) | `%D` | リクエストを処理するのにかかった時間（ミリ秒） |         
         | Response Time (s) | `%T` | リクエストを処理するのにかかった時間（秒） |         
+        | Method | `%m` | リクエストメソッド | 
+        | URL | `%U` | リクエストされたURLパス | 
+        | Version | `%H` | リクエストプロトコル | 
         
         詳細については、各OSSの公式ドキュメントを参照して下さい。Apacheの公式ドキュメントを参照する場合は、[ここ](https://httpd.apache.org/docs/2.4/ja/mod/mod_log_config.html)をクリックして下さい。
         '''
@@ -241,7 +249,7 @@ if uploaded_file is not None:
         default_usecols)
     names = st.multiselect(
         'これらの列を何を意味しますか？',
-        ['Remote Host', 'Time', 'Request', 'Status', 'Size', 'User Agent', 'Response Time (ms)', 'Response Time (s)'],
+        ['Remote Host', 'Time', 'Request', 'Status', 'Size', 'User Agent', 'Response Time (ms)', 'Response Time (s)', 'Method', 'URL', 'Version'],
         default_names, help=help_txt)
 
     is_analyzable = False
@@ -277,7 +285,10 @@ if uploaded_file is not None:
                         'Request': parse_str,
                         'Status': int,
                         'Size': int,
-                        'User Agent': parse_str}
+                        'User Agent': parse_str,
+                        'Method': parse_str,
+                        'URL': parse_str,
+                        'Version': parse_str}
 
         my_bar = st.progress(0)
 
@@ -318,6 +329,10 @@ if uploaded_file is not None:
             #st.exception(e)
             raise e
         my_bar.progress(20)
+
+        if 'Method' in df.columns and 'URL' in df.columns and 'Version' in df.columns:
+            df['Request'] = df['Method'].astype(str).str.cat([df['URL'].astype(str), df['Version'].astype(str)], sep=' ')
+            df.drop(['Method', 'URL', 'Version'], axis=1, inplace=True)
 
         st.markdown('### アクセスログ（解析対象業のみ抽出、先頭5件）')
         st.write(df.head(5))
