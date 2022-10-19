@@ -124,6 +124,14 @@ def drow_delayed_access(df, is_RT_sec, sec):
     ax.yaxis.set_major_locator(MultipleLocator(1))
     fig
 
+    # Consideration when request column is not enclosed by commas, like "GET / HTTP/1.0"
+    for i in range(len(df_tmp.columns) - 2):
+        if df_tmp[i].isin(ALL_METHODS).all():
+            df_tmp[i] = df_tmp[i].astype(str).str.cat([df_tmp[i + 1].astype(str), df_tmp[i + 2].astype(str)], sep=' ')
+            df_tmp.drop([i+1, i+2], axis=1, inplace=True)
+            df_tmp.columns = range(df_tmp.shape[1])
+            break
+
 def define_usecols(df_tmp, default_usecols, default_names):
     for i in range(df_tmp.shape[1]):
         colNumeric = pd.to_numeric(df_tmp[i], errors="coerce")
