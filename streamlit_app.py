@@ -123,7 +123,44 @@ def drow_delayed_access(df, is_RT_sec, sec):
     ax = plt.gca()
     ax.yaxis.set_major_locator(MultipleLocator(1))
     fig
-   
+
+def define_usecols(df_tmp, default_usecols, default_names):
+    for i in range(df_tmp.shape[1]):
+        colNumeric = pd.to_numeric(df_tmp[i], errors="coerce")
+        isNumeric = pd.to_numeric(df_tmp[i], errors="coerce").notna().all()
+        if not 'Remote Host' in default_names and is_valid_ip_address(df_tmp.iloc[0, i]):
+            default_usecols.append(i)
+            default_names.append('Remote Host')
+            continue
+        if not 'Time' in default_names and type(df_tmp.iloc[0, i]) == str and df_tmp.iloc[0, i].count(':') >= 2:
+            default_usecols.append(i)
+            default_names.append('Time')
+            continue
+        if not 'Request' in default_names and type(df_tmp.iloc[0, i]) == str and 'HTTP/' in df_tmp.iloc[0, i]:
+            default_usecols.append(i)
+            default_names.append('Request')
+            continue
+        if not 'Status' in default_names and isNumeric and len(df_tmp) == len(df_tmp[(colNumeric >= 100) & (colNumeric < 600)]):
+            default_usecols.append(i)
+            default_names.append('Status')
+            continue
+        if not 'Size' in default_names and colNumeric.median() > 3000:
+            default_usecols.append(i)
+            default_names.append('Size')
+            continue
+        if not 'User Agent' in default_names and type(df_tmp.iloc[0, i]) == str and 'Mozilla/' in df_tmp.iloc[0, i]:
+            default_usecols.append(i)
+            default_names.append('User Agent')
+            continue
+        if not 'Response Time (s)' in default_names and isNumeric and colNumeric.median() <= 3:
+            default_usecols.append(i)
+            default_names.append('Response Time (s)')
+            continue
+        if not 'Response Time (ms)' in default_names and isNumeric and colNumeric.median() > 3:
+            default_usecols.append(i)
+            default_names.append('Response Time (ms)')
+            continue
+
 st.set_page_config(page_title="MOSSALA", page_icon='icon.png')
 st.title("Multiple OSS Access Log Analyzer")
 st.image('logo.png')
@@ -153,8 +190,14 @@ if uploaded_file is not None:
     for i in range(len(df_tmp.columns) - 2):
         if df_tmp[i].isin(ALL_METHODS).all():
             df_tmp[i] = df_tmp[i].astype(str).str.cat([df_tmp[i + 1].astype(str), df_tmp[i + 2].astype(str)], sep=' ')
-            df_tmp.drop(columns=[i+1, i+2], inplace=True)
+            df_tmp.drop([i+1, i+2], axis=1, inplace=True)
+            df_tmp.columns = range(df_tmp.shape[1])
             break
+    
+    default_usecols = []
+    default_names = []
+
+    define_usecols(df_tmp, default_usecols, default_names)
 
     st.markdown('### アクセスログ（先頭5件）')
     st.write(df_tmp.head(5))
@@ -176,14 +219,13 @@ if uploaded_file is not None:
         詳細については、各OSSの公式ドキュメントを参照して下さい。Apacheの公式ドキュメントを参照する場合は、[ここ](https://httpd.apache.org/docs/2.4/ja/mod/mod_log_config.html)をクリックして下さい。
         '''
 
-    default_usecols = []
-    default_names = []
-    if len(df_tmp.columns) <= 8:
-        default_usecols = [0, 3, 4, 5, 6]
-        default_names = ['Remote Host', 'Time', 'Request', 'Status', 'Size']
-    elif len(df_tmp.columns) > 8:
-        default_usecols = [0, 3, 4, 5, 6, 8]
-        default_names = ['Remote Host', 'Time', 'Request', 'Status', 'Size', 'User Agent']
+    if len(default_usecols) == 0:
+        if len(df_tmp.columns) <= 8:
+            default_usecols = [0, 3, 4, 5, 6]
+            default_names = ['Remote Host', 'Time', 'Request', 'Status', 'Size']
+        elif len(df_tmp.columns) > 8:
+            default_usecols = [0, 3, 4, 5, 6, 8]
+            default_names = ['Remote Host', 'Time', 'Request', 'Status', 'Size', 'User Agent']
 
     usecols = st.multiselect(
         '何番目の列を解析の対象にしますか？',
