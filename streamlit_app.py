@@ -108,14 +108,12 @@ def drow_pie_and_table(df, col_name, title):
 
         st.write(grouped_df.sort_values(['count'], ascending=False))
 
-def drow_delayed_access(df, is_RT_sec, sec):
+def drow_delayed_access(df, sec_unit, sec):
     st.markdown(f'### {sec}秒以上の遅延の発生状況')
     fig = plt.figure(figsize = (15, 5))
-    delayed_access = df[['Request', 'Response Time']]
+    delayed_access = df[['Request Line', 'Response Time']]
     delayed_access.index = df['Time']
-    if not is_RT_sec:
-        sec = sec * 1000
-    delayed_access = delayed_access.resample('S')['Response Time'].apply(lambda x: (x >= sec).sum())
+    delayed_access = delayed_access.resample('S')['Response Time'].apply(lambda x: (x >= sec_unit).sum())
     delayed_access.index.name = 'Time'
     delayed_access.plot()
     plt.title('Total Delayed Access')
@@ -123,14 +121,6 @@ def drow_delayed_access(df, is_RT_sec, sec):
     ax = plt.gca()
     ax.yaxis.set_major_locator(MultipleLocator(1))
     fig
-
-    # Consideration when request column is not enclosed by commas, like "GET / HTTP/1.0"
-    for i in range(len(df_tmp.columns) - 2):
-        if df_tmp[i].isin(ALL_METHODS).all():
-            df_tmp[i] = df_tmp[i].astype(str).str.cat([df_tmp[i + 1].astype(str), df_tmp[i + 2].astype(str)], sep=' ')
-            df_tmp.drop([i+1, i+2], axis=1, inplace=True)
-            df_tmp.columns = range(df_tmp.shape[1])
-            break
 
 def define_usecols(df_tmp, default_usecols, default_names):
 
@@ -157,9 +147,9 @@ def define_usecols(df_tmp, default_usecols, default_names):
             default_usecols.append(i)
             default_names.append('Version')
             continue
-        if not 'Version' in default_names and not 'Request' in default_names and type(df_tmp.iloc[0, i]) == str and 'HTTP/' in df_tmp.iloc[0, i]:
+        if not 'Version' in default_names and not 'Request Line' in default_names and type(df_tmp.iloc[0, i]) == str and 'HTTP/' in df_tmp.iloc[0, i]:
             default_usecols.append(i)
-            default_names.append('Request')
+            default_names.append('Request Line')
             continue
         if not 'Status' in default_names and isNumeric and len(df_tmp) == len(df_tmp[(colNumeric >= 100) & (colNumeric < 600)]):
             default_usecols.append(i)
@@ -222,10 +212,11 @@ if uploaded_file is not None:
         |:-----|:-----:|:-----|
         | Remote Host | `%h` | リモートホスト |
         | Time | `%t` | リクエストを受付けた時刻 | 
-        | Request | `\"%r\"` | リクエストの最初の行 | 
+        | Request Line | `\"%r\"` | リクエストの最初の行 | 
         | Status | `%>s` | ステータス | 
         | Size | `%b` | レスポンスのバイト数 | 
         | User Agent | `\"%{User-agent}i\"` | リクエストのUser-agentヘッダの内容 | 
+        | Response Time (µs) | `%D` | リクエストを処理するのにかかった時間（マイクロ秒） |         
         | Response Time (ms) | `%D` | リクエストを処理するのにかかった時間（ミリ秒） |         
         | Response Time (s) | `%T` | リクエストを処理するのにかかった時間（秒） |         
         | Method | `%m` | リクエストメソッド | 
@@ -238,10 +229,10 @@ if uploaded_file is not None:
     if len(default_usecols) == 0:
         if len(df_tmp.columns) <= 8:
             default_usecols = [0, 3, 4, 5, 6]
-            default_names = ['Remote Host', 'Time', 'Request', 'Status', 'Size']
+            default_names = ['Remote Host', 'Time', 'Request Line', 'Status', 'Size']
         elif len(df_tmp.columns) > 8:
             default_usecols = [0, 3, 4, 5, 6, 8]
-            default_names = ['Remote Host', 'Time', 'Request', 'Status', 'Size', 'User Agent']
+            default_names = ['Remote Host', 'Time', 'Request Line', 'Status', 'Size', 'User Agent']
 
     usecols = st.multiselect(
         '何番目の列を解析の対象にしますか？',
@@ -249,7 +240,7 @@ if uploaded_file is not None:
         default_usecols)
     names = st.multiselect(
         'これらの列を何を意味しますか？',
-        ['Remote Host', 'Time', 'Request', 'Status', 'Size', 'User Agent', 'Response Time (ms)', 'Response Time (s)', 'Method', 'URL', 'Version'],
+        ['Remote Host', 'Time', 'Request Line', 'Status', 'Size', 'User Agent', 'Response Time (µs)', 'Response Time (ms)', 'Response Time (s)', 'Method', 'URL', 'Version'],
         default_names, help=help_txt)
 
     is_analyzable = False
@@ -282,7 +273,7 @@ if uploaded_file is not None:
         deafult_converters = {'Remote Host': parse_str,
                         'Time': parse_datetime,
                         'Response Time': int,
-                        'Request': parse_str,
+                        'Request Line': parse_str,
                         'Status': int,
                         'Size': int,
                         'User Agent': parse_str,
@@ -304,12 +295,15 @@ if uploaded_file is not None:
         names = tmp_names
         converters = {}
         for name in names:
-            if name == 'Response Time (ms)':
+            if name == 'Response Time (µs)':
                 converters['Response Time'] = int
-                is_RT_sec = False
+                sec_unit = 1000000
+            elif name == 'Response Time (ms)':
+                converters['Response Time'] = float
+                sec_unit = 1000
             elif name == 'Response Time (s)':
                 converters['Response Time'] = float
-                is_RT_sec = True
+                sec_unit = 1
             elif name in deafult_converters.keys():
                 converters[name] = deafult_converters[name]
         names = [('Response Time' if e.startswith('Response Time') else e) for e in names]
@@ -331,7 +325,7 @@ if uploaded_file is not None:
         my_bar.progress(20)
 
         if 'Method' in df.columns and 'URL' in df.columns and 'Version' in df.columns:
-            df['Request'] = df['Method'].astype(str).str.cat([df['URL'].astype(str), df['Version'].astype(str)], sep=' ')
+            df['Request Line'] = df['Method'].astype(str).str.cat([df['URL'].astype(str), df['Version'].astype(str)], sep=' ')
             df.drop(['Method', 'URL', 'Version'], axis=1, inplace=True)
 
         st.markdown('### アクセスログ（解析対象業のみ抽出、先頭5件）')
@@ -353,18 +347,24 @@ if uploaded_file is not None:
         my_bar.progress(30)
 
         if 'Response Time' in df.columns:
-            if is_RT_sec:
+            if sec_unit == 1:
                 min_rt = str(round(df['Response Time'].min(), 3)).rjust(10)
                 mean_rt = str(round(df['Response Time'].mean(), 3)).rjust(10)
                 median_rt = str(round(df['Response Time'].median(), 3)).rjust(10)
                 max_rt = str(round(df['Response Time'].max(), 3)).rjust(10)
                 unit_rs = '秒'
-            else:
+            elif sec_unit == 1000:
                 min_rt = str(int(df['Response Time'].min())).rjust(10)
                 mean_rt = str(int(df['Response Time'].mean())).rjust(10)
                 median_rt = str(int(df['Response Time'].median())).rjust(10)
                 max_rt = str(int(df['Response Time'].max())).rjust(10)
                 unit_rs = 'ミリ秒'
+            else:
+                min_rt = str(int(df['Response Time'].min())).rjust(10)
+                mean_rt = str(int(df['Response Time'].mean())).rjust(10)
+                median_rt = str(int(df['Response Time'].median())).rjust(10)
+                max_rt = str(int(df['Response Time'].max())).rjust(10)
+                unit_rs = 'マイクロ秒'
             st.markdown(f'''
             ### 応答時間の集計結果
             * 最小値 : {min_rt} {unit_rs}
@@ -373,8 +373,8 @@ if uploaded_file is not None:
             * 最大値 : {max_rt} {unit_rs}
             ''')
 
-            st.markdown('### 応答時間のワースト5')
-            df_sorted = df.sort_values('Response Time', ascending=False).head(5)
+            st.markdown('### 応答時間が3秒以上のリクエストの詳細')
+            df_sorted = df[df['Response Time'] >= 3 * sec_unit].sort_values('Response Time', ascending=False)
             df_sorted
         my_bar.progress(40)
 
@@ -471,10 +471,10 @@ if uploaded_file is not None:
             
         my_bar.progress(70)
 
-        if 'Request' in df.columns and 'Time' in df.columns:
+        if 'Request Line' in df.columns and 'Time' in df.columns:
             st.markdown('### 負荷の状況')
             fig = plt.figure(figsize = (15, 5))
-            access = df['Request']
+            access = df['Request Line']
             access.index = df['Time']
             access = access.resample('S').count()
             access.index.name = 'Time'
@@ -483,10 +483,10 @@ if uploaded_file is not None:
             plt.ylabel('Access')
             fig
 
-        if 'Request' in df.columns and 'Time' in df.columns and 'Status' in df.columns:
+        if 'Request Line' in df.columns and 'Time' in df.columns and 'Status' in df.columns:
             st.markdown('### エラーの発生状況')
             fig = plt.figure(figsize = (15, 5))
-            error_access = df[['Request', 'Status']]
+            error_access = df[['Request Line', 'Status']]
             error_access.index = df['Time']
             error_access = error_access.resample('S')['Status'].apply(lambda x: (x >= 400).sum())
             error_access.index.name = 'Time'
@@ -497,10 +497,10 @@ if uploaded_file is not None:
             ax.yaxis.set_major_locator(MultipleLocator(1))
             fig
  
-        if 'Request' in df.columns and 'Time' in df.columns and 'Status' in df.columns:
+        if 'Request Line' in df.columns and 'Time' in df.columns and 'Status' in df.columns:
             st.markdown('### システムエラー（HTTP 5xx）の発生状況')
             fig = plt.figure(figsize = (15, 5))
-            error_access = df[['Request', 'Status']]
+            error_access = df[['Request Line', 'Status']]
             error_access.index = df['Time']
             error_access = error_access.resample('S')['Status'].apply(lambda x: (x >= 500).sum())
             error_access.index.name = 'Time'
@@ -511,14 +511,14 @@ if uploaded_file is not None:
             ax.yaxis.set_major_locator(MultipleLocator(1))
             fig
  
-        if 'Request' in df.columns and 'Time' in df.columns and 'Response Time' in df.columns:
-            drow_delayed_access(df, is_RT_sec, 1)
-            drow_delayed_access(df, is_RT_sec, 3)
-            drow_delayed_access(df, is_RT_sec, 10)
-            drow_delayed_access(df, is_RT_sec, 30)
+        if 'Request Line' in df.columns and 'Time' in df.columns and 'Response Time' in df.columns:
+            drow_delayed_access(df, sec_unit, 1)
+            drow_delayed_access(df, sec_unit, 3)
+            drow_delayed_access(df, sec_unit, 10)
+            drow_delayed_access(df, sec_unit, 30)
 
-        if 'Request' in df.columns:
-            x = df['Request'].str.split(expand=True)
+        if 'Request Line' in df.columns:
+            x = df['Request Line'].str.split(expand=True)
             x.columns = ['Method', 'URL', 'Version']
             titles = ['リクエストのメソッド', 'リクエストのURL', 'リクエストのバージョン']
             for idx, col_name in enumerate(x.columns):
@@ -529,9 +529,6 @@ if uploaded_file is not None:
         if 'Size' in df.columns and 'Response Time' in df.columns:
             st.markdown('### レスポンスのサイズと時間の関係性')
             fig = plt.figure(figsize = (15, 5))
-            sec_unit = 1000
-            if is_RT_sec:
-                sec_unit = 1
             plt.scatter(df['Size']/1000, df['Response Time']/sec_unit, marker='.')
             plt.xlabel('Size (KB)')
             plt.ylabel('Response Time (sec)')
