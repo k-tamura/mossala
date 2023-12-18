@@ -1,3 +1,4 @@
 matplotlib
 pycountry
 woothee
+streamlit
